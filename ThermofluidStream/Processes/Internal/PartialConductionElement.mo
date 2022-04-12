@@ -20,13 +20,16 @@ partial model PartialConductionElement "Element with quasi-stationary mass and h
   parameter SI.Time T_e = 100 "Factor for feeding back energy."
     annotation(Dialog(tab="Advanced", enable = enforce_global_energy_conservation));
 
+  parameter Boolean useAverageHeatflow = false annotation(Dialog(tab="Advanced"));
+
   Modelica.Thermal.HeatTransfer.Interfaces.HeatPort_a heatPort(Q_flow=Q_flow, T=T_heatPort)
     annotation (Placement(transformation(extent={{-10,88},{10,108}})));
 
   SI.SpecificEnthalpy h(start=Medium.h_default, stateSelect = StateSelect.prefer);
 
   Medium.ThermodynamicState state = Medium.setState_phX(p_in, h, Xi_in);
-  SI.Temperature T = Medium.temperature(state);
+  SI.Temperature T1 = Medium.temperature(state);
+  SI.Temperature T2 = if useAverageHeatflow then Medium.temperature(inlet.state) else T1;
   SI.ThermalConductance k "Thermal conductance heatport->fluid";
 
   SI.Energy deltaE_system(start=0, fixed=true) "Energy difference between m_flow*(h_in-h_out) and Q_flow";
@@ -79,7 +82,23 @@ equation
     deltaE_system = 0;
   end if;
 
-  Q_flow = k*(T_heatPort - T);
+
+  if useAverageHeatflow then
+    //2*Q_flow = k*(T_heatPort - T1) + k*(T_heatPort - T2);
+
+    Q_flow = k* Modelica.Fluid.Utilities.regStep( (T_heatPort - T1)*(T_heatPort - T2),T_heatPort - T1/2 - T2/2,T_heatPort - T1, 0.5);
+
+    //alternative 1:
+    //Q_flow = k*( if (T_heatPort - T1)*(T_heatPort - T2) > 0 then T_heatPort - T1/2 - T2/2 else 0);
+
+    //alternative 2:
+    //Q_flow = k*Niels_log_mean(DeltaT1, DeltaT2)
+
+
+  else
+    Q_flow = k*(T_heatPort - T1);
+  end if;
+
 
   dp = 0;
   h_out = h;
